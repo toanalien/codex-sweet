@@ -31,18 +31,16 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run go fmt check
+      - name: Check formatting
         run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "The following files are not formatted:"
-            echo "$unformatted"
+          FMT_FILES=$(gofmt -l .)
+          if [ -n "$FMT_FILES" ]; then
+            echo "Files not formatted:"
+            echo "$FMT_FILES"
             echo ""
-            echo "Formatting diff:"
             gofmt -d .
             exit 1
           fi
-          echo "All files are properly formatted"
 
   build:
     name: Build ${{ matrix.platform }}
