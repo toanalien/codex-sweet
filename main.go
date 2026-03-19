@@ -29,17 +29,17 @@ type TokenInfo struct {
 }
 
 type CodexAuth struct {
-	AuthMode       string     `json:"auth_mode,omitempty"`
-	OpenAIAPIKey   *string    `json:"OPENAI_API_KEY,omitempty"`
-	Tokens         *TokenInfo `json:"tokens,omitempty"`
-	LastRefresh    string     `json:"last_refresh,omitempty"`
+	AuthMode     string     `json:"auth_mode,omitempty"`
+	OpenAIAPIKey *string    `json:"OPENAI_API_KEY,omitempty"`
+	Tokens       *TokenInfo `json:"tokens,omitempty"`
+	LastRefresh  string     `json:"last_refresh,omitempty"`
 }
 
 type Profile struct {
-	Name      string     `json:"name"`
-	Auth      CodexAuth  `json:"auth"`
-	CreatedAt time.Time  `json:"created_at"`
-	Active    bool       `json:"active"`
+	Name      string    `json:"name"`
+	Auth      CodexAuth `json:"auth"`
+	CreatedAt time.Time `json:"created_at"`
+	Active    bool      `json:"active"`
 }
 
 type ProfileManager struct {
@@ -48,35 +48,35 @@ type ProfileManager struct {
 }
 
 type RateWindow struct {
-	UsedPercent        int `json:"used_percent"`
-	LimitWindowSeconds int `json:"limit_window_seconds"`
-	ResetAfterSeconds  int `json:"reset_after_seconds"`
+	UsedPercent        int   `json:"used_percent"`
+	LimitWindowSeconds int   `json:"limit_window_seconds"`
+	ResetAfterSeconds  int   `json:"reset_after_seconds"`
 	ResetAt            int64 `json:"reset_at"`
 }
 
 type RateLimit struct {
-	Allowed       bool        `json:"allowed"`
-	LimitReached  bool        `json:"limit_reached"`
-	PrimaryWindow *RateWindow `json:"primary_window"`
+	Allowed         bool        `json:"allowed"`
+	LimitReached    bool        `json:"limit_reached"`
+	PrimaryWindow   *RateWindow `json:"primary_window"`
 	SecondaryWindow *RateWindow `json:"secondary_window"`
 }
 
 type Credits struct {
-	HasCredits           bool     `json:"has_credits"`
-	Unlimited            bool     `json:"unlimited"`
-	Balance              string   `json:"balance"`
-	ApproxLocalMessages  []int    `json:"approx_local_messages"`
-	ApproxCloudMessages  []int    `json:"approx_cloud_messages"`
+	HasCredits          bool   `json:"has_credits"`
+	Unlimited           bool   `json:"unlimited"`
+	Balance             string `json:"balance"`
+	ApproxLocalMessages []int  `json:"approx_local_messages"`
+	ApproxCloudMessages []int  `json:"approx_cloud_messages"`
 }
 
 type UsageResponse struct {
-	UserID              string     `json:"user_id"`
-	AccountID           string     `json:"account_id"`
-	Email               string     `json:"email"`
-	PlanType            string     `json:"plan_type"`
-	RateLimit           RateLimit  `json:"rate_limit"`
-	CodeReviewRateLimit RateLimit  `json:"code_review_rate_limit"`
-	Credits             Credits    `json:"credits"`
+	UserID              string    `json:"user_id"`
+	AccountID           string    `json:"account_id"`
+	Email               string    `json:"email"`
+	PlanType            string    `json:"plan_type"`
+	RateLimit           RateLimit `json:"rate_limit"`
+	CodeReviewRateLimit RateLimit `json:"code_review_rate_limit"`
+	Credits             Credits   `json:"credits"`
 }
 
 func formatDuration(seconds int) string {
