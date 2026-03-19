@@ -592,7 +592,8 @@ func cmdAvailable() *cobra.Command {
 				return nil
 			}
 
-			fmt.Println("\n🔍 Checking available profiles...\n")
+			fmt.Println("\n🔍 Checking available profiles...")
+			fmt.Println()
 
 			available := []string{}
 			for name, profile := range pm.Profiles {
