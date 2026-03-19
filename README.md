@@ -6,6 +6,8 @@
 
 CLI tool để quản lý nhiều tài khoản Codex authentication profiles.
 
+![Demo](assets/demo.jpg)
+
 ## Tính năng
 
 - ✅ Lưu nhiều Codex credentials từ `~/.codex/auth.json`
