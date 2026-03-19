@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - goos: linux
+            goarch: amd64
+            platform: linux-amd64
+          - goos: linux
+            goarch: arm64
+            platform: linux-arm64
+
+          # macOS
+          - goos: darwin
+            goarch: amd64
+            platform: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            platform: darwin-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -v -ldflags="-s -w" -o codex-sweet-${{ matrix.platform }} .
+
+      - name: Create tarball
+        run: |
+          tar czf codex-sweet-${{ matrix.platform }}.tar.gz codex-sweet-${{ matrix.platform }}
+          sha256sum codex-sweet-${{ matrix.platform }}.tar.gz > codex-sweet-${{ matrix.platform }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-sweet-${{ matrix.platform }}
+          path: |
+            codex-sweet-${{ matrix.platform }}.tar.gz
+            codex-sweet-${{ matrix.platform }}.tar.gz.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find dist -name "*.tar.gz*" -exec cp {} release/ \;
+          ls -lah release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

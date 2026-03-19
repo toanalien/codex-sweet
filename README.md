@@ -1,5 +1,9 @@
 # Codex Sweet 🍬
 
+[![Build](https://github.com/YOUR_USERNAME/codex-sweet/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/codex-sweet/actions/workflows/build.yml)
+[![Release](https://github.com/YOUR_USERNAME/codex-sweet/actions/workflows/release.yml/badge.svg)](https://github.com/YOUR_USERNAME/codex-sweet/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 CLI tool để quản lý nhiều tài khoản Codex authentication profiles.
 
 ## Tính năng
@@ -14,7 +18,48 @@ CLI tool để quản lý nhiều tài khoản Codex authentication profiles.
 
 ## Cài đặt
 
+### Download Pre-built Binaries (Recommended)
+
+Download latest release từ [GitHub Releases](https://github.com/YOUR_USERNAME/codex-sweet/releases):
+
 ```bash
+# Linux AMD64
+wget https://github.com/YOUR_USERNAME/codex-sweet/releases/latest/download/codex-sweet-linux-amd64.tar.gz
+tar xzf codex-sweet-linux-amd64.tar.gz
+sudo mv codex-sweet-linux-amd64 /usr/local/bin/codex-sweet
+chmod +x /usr/local/bin/codex-sweet
+
+# Linux ARM64
+wget https://github.com/YOUR_USERNAME/codex-sweet/releases/latest/download/codex-sweet-linux-arm64.tar.gz
+tar xzf codex-sweet-linux-arm64.tar.gz
+sudo mv codex-sweet-linux-arm64 /usr/local/bin/codex-sweet
+chmod +x /usr/local/bin/codex-sweet
+
+# macOS Intel (AMD64)
+wget https://github.com/YOUR_USERNAME/codex-sweet/releases/latest/download/codex-sweet-darwin-amd64.tar.gz
+tar xzf codex-sweet-darwin-amd64.tar.gz
+sudo mv codex-sweet-darwin-amd64 /usr/local/bin/codex-sweet
+chmod +x /usr/local/bin/codex-sweet
+
+# macOS Apple Silicon (ARM64/M1/M2/M3)
+wget https://github.com/YOUR_USERNAME/codex-sweet/releases/latest/download/codex-sweet-darwin-arm64.tar.gz
+tar xzf codex-sweet-darwin-arm64.tar.gz
+sudo mv codex-sweet-darwin-arm64 /usr/local/bin/codex-sweet
+chmod +x /usr/local/bin/codex-sweet
+```
+
+**Verify checksum**:
+```bash
+sha256sum -c codex-sweet-linux-amd64.tar.gz.sha256
+```
+
+### Build from Source
+
+Requires Go 1.22+:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/codex-sweet.git
+cd codex-sweet
 go build -o codex-sweet
 sudo mv codex-sweet /usr/local/bin/
 ```
