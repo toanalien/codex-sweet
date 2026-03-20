@@ -55,6 +55,14 @@ chmod +x /usr/local/bin/codex-sweet
 sha256sum -c codex-sweet-linux-amd64.tar.gz.sha256
 ```
 
+**macOS Users**: Remove quarantine attribute after download:
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/codex-sweet
+# Or use: xattr -c /usr/local/bin/codex-sweet
+```
+
+Hoặc allow qua **System Settings → Privacy & Security → Open Anyway**
+
 ### Build from Source
 
 Requires Go 1.22+:
@@ -541,6 +549,54 @@ rm -rf ~/.codex-sweet/
 # 3. Login lại và save profiles mới
 codex auth login --device-auth
 codex-sweet save
+```
+
+## 🔧 Troubleshooting
+
+### macOS: "Apple could not verify codex-sweet is free of malware"
+
+Binary chưa được Apple sign. Fix bằng 1 trong 3 cách:
+
+**Option 1: Remove quarantine (Khuyến nghị)**
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/codex-sweet
+```
+
+**Option 2: Clear all attributes**
+```bash
+xattr -c /usr/local/bin/codex-sweet
+```
+
+**Option 3: Allow qua System Settings**
+1. Try run `codex-sweet`
+2. Click "Cancel" khi popup xuất hiện
+3. Mở **System Settings → Privacy & Security**
+4. Scroll xuống, click **"Open Anyway"**
+5. Confirm với password
+
+**Verify đã fix**:
+```bash
+codex-sweet --help
+# Should work without popup
+```
+
+### Linux: Permission denied
+
+```bash
+chmod +x /usr/local/bin/codex-sweet
+```
+
+### Command not found
+
+Check if binary in PATH:
+```bash
+echo $PATH | grep -o '/usr/local/bin'
+
+# If empty, add to PATH
+export PATH="/usr/local/bin:$PATH"
+
+# Add to ~/.bashrc or ~/.zshrc để permanent
+echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
 ```
 
 ## Tham khảo
