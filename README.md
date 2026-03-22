@@ -17,6 +17,7 @@ CLI tool để quản lý nhiều tài khoản Codex authentication profiles.
 - ✅ **Smart available check** - Tự động tìm profiles còn limit
 - ✅ **Batch usage view** - Xem usage của tất cả profiles cùng lúc
 - ✅ Progress bar trực quan với % còn lại
+- ✅ **Auto-switch daemon** - Tự động rotate profiles khi hết quota (10 phút/lần)
 
 ## Cài đặt
 
@@ -290,36 +291,60 @@ codex-sweet usage
 # Decision: Dùng personal cho task nặng, giữ work cho emergencies
 ```
 
-### Scenario 4: Auto-rotate script
+### Scenario 4: Auto-switch daemon (⭐ NEW)
 
-Tạo script để tự động rotate khi hết limit:
+Run daemon để tự động rotate profiles khi hết quota:
 
 ```bash
-#!/bin/bash
-# auto-rotate.sh
+# Start daemon (runs in foreground with status logs)
+codex-sweet auto
 
-while true; do
-    # Thử execute Codex command
-    codex chat "$1" && break
-
-    # Nếu fail, check available profiles
-    AVAILABLE=$(codex-sweet available | grep "Found" | awk '{print $2}')
-
-    if [ "$AVAILABLE" = "0" ]; then
-        echo "❌ All profiles exhausted. Waiting 1 hour..."
-        sleep 3600
-    else
-        # Get first available profile (not currently active)
-        NEXT_PROFILE=$(codex-sweet available | grep -v "●" | head -1 | awk '{print $2}')
-        echo "🔄 Switching to $NEXT_PROFILE"
-        codex-sweet switch "$NEXT_PROFILE"
-    fi
-done
+# Output:
+# 🤖 Starting auto-switch daemon...
+# ⏰ Check interval: 10m0s
+# 📊 Quota threshold: 20%
+#
+# [10:30:00] 🔍 Checking profiles...
+# 📊 Current: work@company.com (5h: 45%, Weekly: 52%)
+# ⚠️  Current profile quota low, finding alternative...
+# 🔄 Switched: work@company.com → personal@gmail.com (5h: 95%, Weekly: 88%)
 ```
 
-Usage:
+Daemon sẽ:
+- ✅ Check quota mỗi 10 phút
+- ✅ Cache quota trong 5 phút để giảm API calls
+- ✅ Auto-switch khi quota < 20%
+- ✅ Random check order để phân tán load
+- ✅ Log tất cả switches vào `~/.codex-sweet/log.json`
+- ✅ Graceful shutdown với Ctrl+C
+
+**Chạy daemon dưới nền:**
 ```bash
-./auto-rotate.sh "implement feature X"
+# Run in background with nohup
+nohup codex-sweet auto > /dev/null 2>&1 &
+
+# Or with systemd (recommended)
+# Create ~/.config/systemd/user/codex-sweet.service:
+[Unit]
+Description=Codex Sweet Auto-Switch Daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/codex-sweet auto
+Restart=always
+
+[Install]
+WantedBy=default.target
+
+# Enable and start
+systemctl --user enable codex-sweet
+systemctl --user start codex-sweet
+systemctl --user status codex-sweet
+```
+
+**Xem switch logs:**
+```bash
+cat ~/.codex-sweet/log.json
 ```
 
 ## 💡 Tips & Tricks
@@ -367,6 +392,7 @@ Usage:
 | `codex-sweet usage <email>` | Xem usage 1 profile | `codex-sweet usage work@company.com` |
 | `codex-sweet info <email>` | Xem chi tiết profile | `codex-sweet info work@company.com` |
 | `codex-sweet delete <email>` | Xóa profile | `codex-sweet delete old@email.com` |
+| `codex-sweet auto` | Auto-switch daemon (10min interval) | `codex-sweet auto` |
 
 ## 📋 Profile Structure Details
 
@@ -495,6 +521,8 @@ Host: chatgpt.com
 |------|------|------------|-------------|
 | **Profiles** | `~/.codex-sweet/profiles.json` | `0600` | Lưu tất cả profiles và credentials |
 | **Codex Auth** | `~/.codex/auth.json` | `0600` | Credentials hiện tại của Codex CLI |
+| **Auto Logs** | `~/.codex-sweet/log.json` | `0600` | Auto-switch daemon log history (last 100 entries) |
+| **Auto State** | `~/.codex-sweet/state.json` | `0600` | Daemon state with quota cache |
 
 ### Profiles Structure
 
