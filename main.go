@@ -669,6 +669,7 @@ func main() {
 		cmdUsage(),
 		cmdAvailable(),
 		cmdDelete(),
+		cmdAuto(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
