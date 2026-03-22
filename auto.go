@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	checkInterval   = 10 * time.Minute
-	quotaThreshold  = 20 // Switch when < 20% remaining
-	cacheExpiry     = 5 * time.Minute
-	logFile         = "log.json"
-	stateFile       = "state.json"
+	checkInterval  = 10 * time.Minute
+	quotaThreshold = 20 // Switch when < 20% remaining
+	cacheExpiry    = 5 * time.Minute
+	logFile        = "log.json"
+	stateFile      = "state.json"
 )
 
 type QuotaCache struct {
