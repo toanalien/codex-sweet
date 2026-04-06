@@ -206,6 +206,9 @@ func runAutoDaemon() error {
 		return fmt.Errorf("failed to load daemon state: %w", err)
 	}
 
+	// Initialize notifier
+	notifier := NewNotifier()
+
 	// Setup signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -214,14 +217,14 @@ func runAutoDaemon() error {
 	defer ticker.Stop()
 
 	// Run initial check
-	if err := checkAndSwitch(state); err != nil {
+	if err := checkAndSwitch(state, notifier); err != nil {
 		fmt.Printf("⚠️  Initial check failed: %v\n", err)
 	}
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := checkAndSwitch(state); err != nil {
+			if err := checkAndSwitch(state, notifier); err != nil {
 				fmt.Printf("⚠️  Check failed: %v\n", err)
 			}
 
@@ -235,7 +238,7 @@ func runAutoDaemon() error {
 	}
 }
 
-func checkAndSwitch(state *DaemonState) error {
+func checkAndSwitch(state *DaemonState, notifier *Notifier) error {
 	fmt.Printf("[%s] 🔍 Checking profiles...\n", time.Now().Format("15:04:05"))
 
 	pm, err := loadProfiles()
@@ -253,6 +256,7 @@ func checkAndSwitch(state *DaemonState) error {
 		// No current profile, select best one
 		bestEmail, bestCache, err := selectBestProfile(pm, state)
 		if err != nil {
+			notifier.NotifyAllExhausted()
 			return err
 		}
 
@@ -263,6 +267,7 @@ func checkAndSwitch(state *DaemonState) error {
 		fmt.Printf("✅ Switched to: %s (5h: %d%%, Weekly: %d%%)\n",
 			bestEmail, bestCache.PrimaryPercent, bestCache.SecondaryPercent)
 
+		notifier.NotifyAutoSwitch("(none)", bestEmail, bestCache.PrimaryPercent, bestCache.SecondaryPercent)
 		return state.logSwitch("", bestEmail, "initial", "", formatQuota(bestCache))
 	}
 
@@ -289,11 +294,15 @@ func checkAndSwitch(state *DaemonState) error {
 		return state.save()
 	}
 
+	// Notify quota low
+	notifier.NotifyQuotaLow(currentEmail, currentCache.PrimaryPercent, currentCache.SecondaryPercent)
+
 	// Need to switch - find best alternative
 	fmt.Println("⚠️  Current profile quota low, finding alternative...")
 
 	bestEmail, bestCache, err := selectBestProfile(pm, state)
 	if err != nil {
+		notifier.NotifyAllExhausted()
 		return err
 	}
 
@@ -311,6 +320,8 @@ func checkAndSwitch(state *DaemonState) error {
 
 	fmt.Printf("🔄 Switched: %s → %s (5h: %d%%, Weekly: %d%%)\n",
 		currentEmail, bestEmail, bestCache.PrimaryPercent, bestCache.SecondaryPercent)
+
+	notifier.NotifyAutoSwitch(currentEmail, bestEmail, bestCache.PrimaryPercent, bestCache.SecondaryPercent)
 
 	state.LastCheckTime = time.Now()
 	if err := state.logSwitch(currentEmail, bestEmail, reason, formatQuota(currentCache), formatQuota(bestCache)); err != nil {
