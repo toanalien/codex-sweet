@@ -18,6 +18,7 @@ CLI tool để quản lý nhiều tài khoản Codex authentication profiles.
 - ✅ **Batch usage view** - Xem usage của tất cả profiles cùng lúc
 - ✅ Progress bar trực quan với % còn lại
 - ✅ **Auto-switch daemon** - Tự động rotate profiles khi hết quota (10 phút/lần)
+- ✅ **Notifications** - Gửi thông báo qua Telegram, Discord, Slack,... khi quota thấp, hết limit, auto-switch (via [shoutrrr](https://github.com/containrrr/shoutrrr))
 
 ## Cài đặt
 
@@ -347,6 +348,41 @@ systemctl --user status codex-sweet
 cat ~/.codex-sweet/log.json
 ```
 
+### Scenario 5: Notifications (⭐ NEW)
+
+Nhận thông báo qua Telegram, Discord, Slack,... khi có sự kiện quota:
+
+```bash
+# Thêm Telegram notification
+codex-sweet notify add "telegram://botToken@telegram?chats=chatID"
+
+# Thêm Discord notification
+codex-sweet notify add "discord://token@channelID"
+
+# Thêm Slack notification
+codex-sweet notify add "slack://token-a/token-b/token-c"
+
+# Xem danh sách notification URLs
+codex-sweet notify list
+
+# Gửi test notification
+codex-sweet notify test
+
+# Xóa notification URL theo index
+codex-sweet notify remove 0
+```
+
+**Các sự kiện được thông báo:**
+- **quota_low** - Khi quota của profile hiện tại xuống thấp (< 20%)
+- **limit_reached** - Khi profile bị rate limit
+- **auto_switch** - Khi daemon tự động chuyển profile
+- **all_exhausted** - Khi tất cả profiles đều hết quota
+
+**Supported services** ([shoutrrr](https://github.com/containrrr/shoutrrr)):
+Telegram, Discord, Slack, Email (SMTP), Ntfy, Pushover, Gotify, Teams, Google Chat, Matrix, Mattermost, Pushbullet, Rocket.Chat, và nhiều hơn nữa.
+
+Config được lưu tại `~/.codex-sweet/notify.json` với permission `0600`.
+
 ## 💡 Tips & Tricks
 
 1. **Alias cho workflow nhanh**:
@@ -393,6 +429,10 @@ cat ~/.codex-sweet/log.json
 | `codex-sweet info <email>` | Xem chi tiết profile | `codex-sweet info work@company.com` |
 | `codex-sweet delete <email>` | Xóa profile | `codex-sweet delete old@email.com` |
 | `codex-sweet auto` | Auto-switch daemon (10min interval) | `codex-sweet auto` |
+| `codex-sweet notify add <url>` | Thêm notification URL | `codex-sweet notify add "telegram://bot:token@telegram?chats=123"` |
+| `codex-sweet notify remove <index>` | Xóa notification URL | `codex-sweet notify remove 0` |
+| `codex-sweet notify list` | Xem notification URLs | `codex-sweet notify list` |
+| `codex-sweet notify test` | Gửi test notification | `codex-sweet notify test` |
 
 ## 📋 Profile Structure Details
 
@@ -523,6 +563,7 @@ Host: chatgpt.com
 | **Codex Auth** | `~/.codex/auth.json` | `0600` | Credentials hiện tại của Codex CLI |
 | **Auto Logs** | `~/.codex-sweet/log.json` | `0600` | Auto-switch daemon log history (last 100 entries) |
 | **Auto State** | `~/.codex-sweet/state.json` | `0600` | Daemon state with quota cache |
+| **Notify Config** | `~/.codex-sweet/notify.json` | `0600` | Notification URLs and event settings |
 
 ### Profiles Structure
 
