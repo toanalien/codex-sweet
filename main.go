@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,6 +79,25 @@ type UsageResponse struct {
 	CodeReviewRateLimit RateLimit `json:"code_review_rate_limit"`
 	Credits             Credits   `json:"credits"`
 }
+
+type UsageAPIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *UsageAPIError) Error() string {
+	return fmt.Sprintf("API error: %d - %s", e.StatusCode, e.Body)
+}
+
+type AuthHealth struct {
+	Email     string
+	Usable    bool
+	Permanent bool
+	Reason    string
+	Usage     *UsageResponse
+}
+
+var usageChecker = getUsage
 
 func formatDuration(seconds int) string {
 	if seconds < 60 {
@@ -233,7 +253,7 @@ func getUsage(accessToken, accountID string) (*UsageResponse, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error: %d - %s", resp.StatusCode, string(body))
+		return nil, &UsageAPIError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
 	var usage UsageResponse
@@ -245,32 +265,131 @@ func getUsage(accessToken, accountID string) (*UsageResponse, error) {
 }
 
 func getEmailFromAuth(auth *CodexAuth) (string, error) {
-	// Try to get email from API if we have ChatGPT auth
-	if auth.AuthMode == "chatgpt" && auth.Tokens != nil && auth.Tokens.AccessToken != "" && auth.Tokens.AccountID != "" {
-		usage, err := getUsage(auth.Tokens.AccessToken, auth.Tokens.AccountID)
-		if err == nil && usage.Email != "" {
-			return usage.Email, nil
+	health := checkAuthHealth(auth)
+	if health.Email != "" {
+		return health.Email, nil
+	}
+
+	return "", fmt.Errorf("unable to extract email from credentials: %s", health.Reason)
+}
+
+func extractEmailFromIDToken(auth *CodexAuth) (string, bool) {
+	if auth == nil || auth.Tokens == nil || auth.Tokens.IDToken == "" {
+		return "", false
+	}
+
+	// Simple JWT decode (not validating signature, just extracting claims)
+	parts := strings.Split(auth.Tokens.IDToken, ".")
+	if len(parts) < 2 {
+		return "", false
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", false
+	}
+
+	var claims map[string]interface{}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", false
+	}
+
+	email, ok := claims["email"].(string)
+	return email, ok && email != ""
+}
+
+func classifyUsageError(err error) (permanent bool, reason string) {
+	if err == nil {
+		return false, ""
+	}
+
+	var apiErr *UsageAPIError
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden:
+			return true, fmt.Sprintf("token rejected by API (%d); it may be revoked or expired", apiErr.StatusCode)
+		case apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 && apiErr.StatusCode != http.StatusTooManyRequests:
+			return true, fmt.Sprintf("credentials rejected by API (%d)", apiErr.StatusCode)
+		default:
+			return false, fmt.Sprintf("temporary API error (%d)", apiErr.StatusCode)
 		}
 	}
 
-	// Fallback: try to decode from ID token (JWT)
-	if auth.Tokens != nil && auth.Tokens.IDToken != "" {
-		// Simple JWT decode (not validating signature, just extracting claims)
-		parts := strings.Split(auth.Tokens.IDToken, ".")
-		if len(parts) >= 2 {
-			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-			if err == nil {
-				var claims map[string]interface{}
-				if err := json.Unmarshal(payload, &claims); err == nil {
-					if email, ok := claims["email"].(string); ok && email != "" {
-						return email, nil
-					}
-				}
-			}
+	return false, fmt.Sprintf("temporary check error: %v", err)
+}
+
+func checkAuthHealth(auth *CodexAuth) *AuthHealth {
+	health := &AuthHealth{}
+	if email, ok := extractEmailFromIDToken(auth); ok {
+		health.Email = email
+	}
+
+	if auth == nil {
+		health.Permanent = true
+		health.Reason = "missing auth"
+		return health
+	}
+
+	if auth.AuthMode != "chatgpt" {
+		health.Permanent = true
+		health.Reason = fmt.Sprintf("not chatgpt auth mode: %s", auth.AuthMode)
+		return health
+	}
+
+	if auth.Tokens == nil {
+		health.Permanent = true
+		health.Reason = "missing tokens"
+		return health
+	}
+
+	if auth.Tokens.AccessToken == "" {
+		health.Permanent = true
+		health.Reason = "missing access token"
+		return health
+	}
+
+	if auth.Tokens.AccountID == "" {
+		health.Permanent = true
+		health.Reason = "missing account id"
+		return health
+	}
+
+	usage, err := usageChecker(auth.Tokens.AccessToken, auth.Tokens.AccountID)
+	if err != nil {
+		permanent, reason := classifyUsageError(err)
+		health.Permanent = permanent
+		health.Reason = reason
+		return health
+	}
+
+	health.Usage = usage
+	health.Usable = true
+	health.Reason = "ok"
+	if usage.Email != "" {
+		health.Email = usage.Email
+	}
+	return health
+}
+
+func findDuplicateProfile(pm *ProfileManager, email string) (string, *Profile, *AuthHealth) {
+	for name, profile := range pm.Profiles {
+		health := checkAuthHealth(&profile.Auth)
+		if name == email || profile.Name == email || health.Email == email {
+			return name, profile, health
 		}
 	}
 
-	return "", fmt.Errorf("unable to extract email from credentials")
+	return "", nil, nil
+}
+
+func activateProfile(pm *ProfileManager, profileName string) {
+	for _, p := range pm.Profiles {
+		p.Active = false
+	}
+	if profile, ok := pm.Profiles[profileName]; ok {
+		profile.Active = true
+	}
+	pm.Current = profileName
 }
 
 func cmdSave() *cobra.Command {
@@ -288,10 +407,10 @@ func cmdSave() *cobra.Command {
 				return fmt.Errorf("failed to read ~/.codex/auth.json: %w", err)
 			}
 
-			// Extract email from credentials
-			email, err := getEmailFromAuth(auth)
-			if err != nil {
-				return fmt.Errorf("failed to get email from credentials: %w\nMake sure you're logged in with 'codex auth login --device-auth'", err)
+			newHealth := checkAuthHealth(auth)
+			email := newHealth.Email
+			if email == "" {
+				return fmt.Errorf("failed to get email from credentials: %s\nMake sure you're logged in with 'codex auth login --device-auth'", newHealth.Reason)
 			}
 
 			pm, err := loadProfiles()
@@ -299,31 +418,58 @@ func cmdSave() *cobra.Command {
 				return err
 			}
 
-			// Check if email already exists
-			for name, profile := range pm.Profiles {
-				existingEmail, _ := getEmailFromAuth(&profile.Auth)
-				if existingEmail == email {
-					fmt.Printf("⚠️  Profile already exists: '%s' (%s)\n", name, email)
-					fmt.Printf("💡 Tip: Use 'codex-sweet switch %s' to activate it\n", name)
+			if existingName, existingProfile, existingHealth := findDuplicateProfile(pm, email); existingProfile != nil {
+				if existingHealth.Usable {
+					fmt.Printf("⚠️  Profile already exists: '%s' (%s)\n", existingName, email)
+					fmt.Printf("✓ Existing profile is still usable; keeping it unchanged.\n")
+					fmt.Printf("💡 Tip: Use 'codex-sweet switch %s' to activate it\n", existingName)
 					return nil
 				}
+
+				if !existingHealth.Permanent {
+					fmt.Printf("⚠️  Profile already exists: '%s' (%s)\n", existingName, email)
+					fmt.Printf("⚠️  Could not safely verify existing profile (%s). Keeping it unchanged to avoid overwriting a possibly valid token.\n", existingHealth.Reason)
+					return nil
+				}
+
+				fmt.Printf("⚠️  Profile already exists: '%s' (%s)\n", existingName, email)
+				fmt.Printf("🔎 Existing profile is unusable (%s). Will replace it with current Codex credentials.\n", existingHealth.Reason)
+
+				if !newHealth.Usable {
+					if newHealth.Permanent {
+						return fmt.Errorf("current Codex credentials are also unusable (%s); not replacing profile '%s'", newHealth.Reason, existingName)
+					}
+					return fmt.Errorf("current Codex credentials could not be verified (%s); not replacing profile '%s'", newHealth.Reason, existingName)
+				}
+
+				existingProfile.Name = existingName
+				existingProfile.Auth = *auth
+				activateProfile(pm, existingName)
+
+				if err := pm.save(); err != nil {
+					return err
+				}
+
+				fmt.Printf("✓ Replaced profile '%s' with fresh credentials and activated it\n", existingName)
+				return nil
 			}
 
-			// Use email as profile name
+			if !newHealth.Usable {
+				if newHealth.Permanent {
+					return fmt.Errorf("current Codex credentials are unusable (%s); not saving profile '%s'", newHealth.Reason, email)
+				}
+				fmt.Printf("⚠️  Could not verify current credentials now (%s). Saving new profile because no duplicate exists.\n", newHealth.Reason)
+			}
+
 			profileName := email
-
-			// Set all profiles to inactive
-			for _, p := range pm.Profiles {
-				p.Active = false
-			}
 
 			pm.Profiles[profileName] = &Profile{
 				Name:      profileName,
 				Auth:      *auth,
 				CreatedAt: time.Now(),
-				Active:    true,
+				Active:    false,
 			}
-			pm.Current = profileName
+			activateProfile(pm, profileName)
 
 			if err := pm.save(); err != nil {
 				return err
@@ -357,12 +503,7 @@ func cmdSwitch() *cobra.Command {
 				return fmt.Errorf("failed to update ~/.codex/auth.json: %w", err)
 			}
 
-			// Update active status
-			for _, p := range pm.Profiles {
-				p.Active = false
-			}
-			profile.Active = true
-			pm.Current = profileName
+			activateProfile(pm, profileName)
 
 			if err := pm.save(); err != nil {
 				return err
@@ -477,7 +618,7 @@ func printProfileUsage(profileName string, profile *Profile) error {
 		return nil
 	}
 
-	usage, err := getUsage(profile.Auth.Tokens.AccessToken, profile.Auth.Tokens.AccountID)
+	usage, err := usageChecker(profile.Auth.Tokens.AccessToken, profile.Auth.Tokens.AccountID)
 	if err != nil {
 		fmt.Printf("❌ %s: failed to fetch usage (%v)\n", profileName, err)
 		return nil
@@ -604,7 +745,7 @@ func cmdAvailable() *cobra.Command {
 					continue
 				}
 
-				usage, err := getUsage(profile.Auth.Tokens.AccessToken, profile.Auth.Tokens.AccountID)
+				usage, err := usageChecker(profile.Auth.Tokens.AccessToken, profile.Auth.Tokens.AccountID)
 				if err != nil {
 					continue
 				}

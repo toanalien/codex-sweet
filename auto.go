@@ -125,7 +125,7 @@ func checkProfileQuota(email string, profile *Profile, state *DaemonState) (*Quo
 	}
 
 	// Fetch usage
-	usage, err := getUsage(profile.Auth.Tokens.AccessToken, profile.Auth.Tokens.AccountID)
+	usage, err := usageChecker(profile.Auth.Tokens.AccessToken, profile.Auth.Tokens.AccountID)
 	if err != nil {
 		return nil, fmt.Errorf("profile %s: failed to fetch usage: %w", email, err)
 	}
