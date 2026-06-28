@@ -213,6 +213,91 @@ func TestCmdSaveDuplicateProfileExistingTemporaryErrorNoOverwrite(t *testing.T) 
 	}
 }
 
+func TestCmdUseSwitchesProfileLikeSwitch(t *testing.T) {
+	setupTempHome(t)
+	writeProfiles(t, &ProfileManager{
+		Profiles: map[string]*Profile{
+			"work@example.com":     profileWithAuth("work@example.com", authWithToken("work@example.com", "work-token", "work-account")),
+			"personal@example.com": profileWithAuth("personal@example.com", authWithToken("personal@example.com", "personal-token", "personal-account")),
+		},
+		Current: "work@example.com",
+	})
+
+	output, err := runCobraCommand(t, cmdUse(), "personal@example.com")
+	if err != nil {
+		t.Fatalf("use returned error: %v", err)
+	}
+
+	if !strings.Contains(output, "✓ Switched to profile 'personal@example.com'") {
+		t.Fatalf("expected switch confirmation, got %q", output)
+	}
+
+	pm, err := loadProfiles()
+	if err != nil {
+		t.Fatalf("load profiles: %v", err)
+	}
+	if pm.Current != "personal@example.com" {
+		t.Fatalf("expected current profile personal@example.com, got %q", pm.Current)
+	}
+
+	auth, err := loadCodexAuth()
+	if err != nil {
+		t.Fatalf("load codex auth: %v", err)
+	}
+	if auth.Tokens == nil || auth.Tokens.AccessToken != "personal-token" {
+		t.Fatalf("expected auth token personal-token, got %#v", auth.Tokens)
+	}
+}
+
+func TestRootCommandWithoutArgsShowsUsageAndCurrentAccount(t *testing.T) {
+	setupTempHome(t)
+	writeProfiles(t, &ProfileManager{
+		Profiles: map[string]*Profile{
+			"work@example.com":     profileWithAuth("work@example.com", authWithToken("work@example.com", "work-token", "work-account")),
+			"personal@example.com": profileWithAuth("personal@example.com", authWithToken("personal@example.com", "personal-token", "personal-account")),
+		},
+		Current: "personal@example.com",
+	})
+	stubUsageChecker(t, map[string]usageCheckResult{
+		"work-token":     {usage: usageWithLimits("work@example.com", 25, 40)},
+		"personal-token": {usage: usageWithLimits("personal@example.com", 10, 20)},
+	})
+
+	output, err := runCobraCommand(t, newRootCommand())
+	if err != nil {
+		t.Fatalf("root command returned error: %v", err)
+	}
+
+	if !strings.Contains(output, "Current account: personal@example.com") {
+		t.Fatalf("expected current account in output, got %q", output)
+	}
+	if !strings.Contains(output, "📊 work@example.com - work@example.com (plus)") {
+		t.Fatalf("expected work usage in output, got %q", output)
+	}
+	if !strings.Contains(output, "📊 personal@example.com - personal@example.com (plus)") {
+		t.Fatalf("expected personal usage in output, got %q", output)
+	}
+	if strings.Contains(output, "Checking available profiles") {
+		t.Fatalf("expected root command to show usage, not available profiles, got %q", output)
+	}
+}
+
+func TestCompletionBashCommandGeneratesBashCompletion(t *testing.T) {
+	setupTempHome(t)
+
+	output, err := runCobraCommand(t, newRootCommand(), "completion", "bash")
+	if err != nil {
+		t.Fatalf("completion bash returned error: %v", err)
+	}
+
+	if !strings.Contains(output, "bash completion for codex-sweet") {
+		t.Fatalf("expected bash completion header, got %q", output)
+	}
+	if !strings.Contains(output, "__start_codex-sweet") {
+		t.Fatalf("expected cobra bash completion function, got %q", output)
+	}
+}
+
 type usageCheckResult struct {
 	usage *UsageResponse
 	err   error
@@ -242,6 +327,16 @@ func setupTempHome(t *testing.T) string {
 func runSaveCommand(t *testing.T) error {
 	t.Helper()
 
+	_, runErr := runCobraCommand(t, cmdSave())
+	return runErr
+}
+
+func runCobraCommand(t *testing.T, cmd interface {
+	SetArgs([]string)
+	Execute() error
+}, args ...string) (string, error) {
+	t.Helper()
+
 	oldStdout := os.Stdout
 	readPipe, writePipe, err := os.Pipe()
 	if err != nil {
@@ -250,18 +345,18 @@ func runSaveCommand(t *testing.T) error {
 	os.Stdout = writePipe
 	defer func() { os.Stdout = oldStdout }()
 
-	cmd := cmdSave()
-	runErr := cmd.RunE(cmd, nil)
+	cmd.SetArgs(args)
+	runErr := cmd.Execute()
 
 	if err := writePipe.Close(); err != nil {
 		t.Fatalf("close stdout pipe: %v", err)
 	}
-	_, _ = io.ReadAll(readPipe)
+	output, _ := io.ReadAll(readPipe)
 	if err := readPipe.Close(); err != nil {
 		t.Fatalf("close stdout reader: %v", err)
 	}
 
-	return runErr
+	return string(output), runErr
 }
 
 func writeCodexAuth(t *testing.T, auth CodexAuth) {
@@ -341,6 +436,24 @@ func usageForEmail(email string) *UsageResponse {
 		PlanType: "plus",
 		RateLimit: RateLimit{
 			Allowed: true,
+		},
+	}
+}
+
+func usageWithLimits(email string, primaryUsed, secondaryUsed int) *UsageResponse {
+	return &UsageResponse{
+		Email:    email,
+		PlanType: "plus",
+		RateLimit: RateLimit{
+			Allowed: true,
+			PrimaryWindow: &RateWindow{
+				UsedPercent: primaryUsed,
+				ResetAt:     time.Date(2026, 6, 28, 16, 30, 0, 0, time.Local).Unix(),
+			},
+			SecondaryWindow: &RateWindow{
+				UsedPercent: secondaryUsed,
+				ResetAt:     time.Date(2026, 7, 1, 15, 30, 0, 0, time.Local).Unix(),
+			},
 		},
 	}
 }

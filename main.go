@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -392,6 +393,48 @@ func activateProfile(pm *ProfileManager, profileName string) {
 	pm.Current = profileName
 }
 
+func profileNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	pm, err := loadProfiles()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	names := make([]string, 0, len(pm.Profiles))
+	for name := range pm.Profiles {
+		if strings.HasPrefix(name, toComplete) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+
+	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
+func useProfile(profileName string) error {
+	pm, err := loadProfiles()
+	if err != nil {
+		return err
+	}
+
+	profile, exists := pm.Profiles[profileName]
+	if !exists {
+		return fmt.Errorf("profile '%s' not found", profileName)
+	}
+
+	if err := saveCodexAuth(&profile.Auth); err != nil {
+		return fmt.Errorf("failed to update ~/.codex/auth.json: %w", err)
+	}
+
+	activateProfile(pm, profileName)
+
+	if err := pm.save(); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Switched to profile '%s'\n", profileName)
+	return nil
+}
+
 func cmdSave() *cobra.Command {
 	return &cobra.Command{
 		Use:   "save",
@@ -486,31 +529,31 @@ func cmdSwitch() *cobra.Command {
 		Use:   "switch [profile-name]",
 		Short: "Switch to a different profile",
 		Args:  cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return profileNameCompletion(cmd, args, toComplete)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			profileName := args[0]
+			return useProfile(args[0])
+		},
+	}
+}
 
-			pm, err := loadProfiles()
-			if err != nil {
-				return err
+func cmdUse() *cobra.Command {
+	return &cobra.Command{
+		Use:   "use [profile-name]",
+		Short: "Use a saved profile (alias of switch)",
+		Args:  cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
-
-			profile, exists := pm.Profiles[profileName]
-			if !exists {
-				return fmt.Errorf("profile '%s' not found", profileName)
-			}
-
-			if err := saveCodexAuth(&profile.Auth); err != nil {
-				return fmt.Errorf("failed to update ~/.codex/auth.json: %w", err)
-			}
-
-			activateProfile(pm, profileName)
-
-			if err := pm.save(); err != nil {
-				return err
-			}
-
-			fmt.Printf("✓ Switched to profile '%s'\n", profileName)
-			return nil
+			return profileNameCompletion(cmd, args, toComplete)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return useProfile(args[0])
 		},
 	}
 }
@@ -553,6 +596,12 @@ func cmdInfo() *cobra.Command {
 		Use:   "info [profile-name]",
 		Short: "Show profile information",
 		Args:  cobra.MaximumNArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return profileNameCompletion(cmd, args, toComplete)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pm, err := loadProfiles()
 			if err != nil {
@@ -652,6 +701,12 @@ func cmdUsage() *cobra.Command {
 		Use:   "usage [profile-name]",
 		Short: "Check Codex usage for profiles (all profiles if no name specified)",
 		Args:  cobra.MaximumNArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return profileNameCompletion(cmd, args, toComplete)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pm, err := loadProfiles()
 			if err != nil {
@@ -690,6 +745,12 @@ func cmdDelete() *cobra.Command {
 		Use:   "delete [profile-name]",
 		Short: "Delete a saved profile",
 		Args:  cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return profileNameCompletion(cmd, args, toComplete)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			profileName := args[0]
 
@@ -791,20 +852,60 @@ func cmdAvailable() *cobra.Command {
 	}
 }
 
-func main() {
+func cmdCompletion(rootCmd *cobra.Command) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "completion",
+		Short: "Generate shell completion scripts",
+	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "bash",
+		Short: "Generate bash completion script",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return rootCmd.GenBashCompletion(os.Stdout)
+		},
+	})
+
+	return cmd
+}
+
+func printCurrentAccount() error {
+	pm, err := loadProfiles()
+	if err != nil {
+		return err
+	}
+
+	current := pm.Current
+	if current == "" {
+		current = "none"
+	}
+
+	fmt.Printf("Current account: %s\n", current)
+	return nil
+}
+
+func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "codex-sweet",
 		Short: "Manage multiple Codex authentication profiles",
 		Long:  "A CLI tool to save, switch, and manage multiple Codex authentication profiles",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Default action: show available profiles
-			return cmdAvailable().RunE(cmd, args)
+			if err := printCurrentAccount(); err != nil {
+				return err
+			}
+			fmt.Println()
+
+			// Default action: show usage for all profiles
+			return cmdUsage().RunE(cmd, args)
 		},
 	}
 
 	rootCmd.AddCommand(
 		cmdSave(),
 		cmdSwitch(),
+		cmdUse(),
 		cmdList(),
 		cmdInfo(),
 		cmdUsage(),
@@ -813,6 +914,13 @@ func main() {
 		cmdAuto(),
 		cmdNotify(),
 	)
+	rootCmd.AddCommand(cmdCompletion(rootCmd))
+
+	return rootCmd
+}
+
+func main() {
+	rootCmd := newRootCommand()
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
