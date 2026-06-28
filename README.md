@@ -11,11 +11,13 @@ CLI tool để quản lý nhiều tài khoản Codex authentication profiles.
 ## Tính năng
 
 - ✅ Lưu nhiều Codex credentials từ `~/.codex/auth.json`
-- ✅ Swap nhanh giữa các tài khoản
-- ✅ Quản lý profiles: save, switch, list, info, delete
+- ✅ Swap nhanh giữa các tài khoản bằng `switch` hoặc `use`
+- ✅ Quản lý profiles: save, switch/use, list, info, delete
 - ✅ Xem usage và limits (5h, weekly) qua ChatGPT backend API
+- ✅ Chạy `codex-sweet` để xem current account và usage của tất cả profiles
 - ✅ **Smart available check** - Tự động tìm profiles còn limit
 - ✅ **Batch usage view** - Xem usage của tất cả profiles cùng lúc
+- ✅ Bash completion qua `codex-sweet completion bash`
 - ✅ Progress bar trực quan với % còn lại
 - ✅ **Auto-switch daemon** - Tự động rotate profiles khi hết quota (10 phút/lần)
 - ✅ **Notifications** - Gửi thông báo qua Telegram, Discord, Slack,... khi quota thấp, hết limit, auto-switch (via [shoutrrr](https://github.com/containrrr/shoutrrr))
@@ -106,11 +108,16 @@ codex-sweet save
 ### 2. Smart workflow
 
 ```bash
-# Check profiles nào còn limit
+# Xem current account và usage tất cả profiles
 codex-sweet
 
-# Switch sang profile còn nhiều limit nhất
+# Nếu chỉ muốn xem profiles còn limit
+codex-sweet available
+
+# Switch/use sang profile còn nhiều limit nhất
 codex-sweet switch personal@gmail.com
+# Hoặc:
+codex-sweet use personal@gmail.com
 
 # Bắt đầu code!
 codex chat "help me implement..."
@@ -146,10 +153,12 @@ codex-sweet save
 - ✅ Tự động check duplicate - nếu email đã tồn tại sẽ bỏ qua
 - ✅ Không cần nhập tên profile thủ công
 
-### 2. Switch profile
+### 2. Switch/use profile
 
 ```bash
 codex-sweet switch personal@gmail.com
+# Alias dễ nhớ hơn:
+codex-sweet use personal@gmail.com
 ```
 
 File `~/.codex/auth.json` sẽ được cập nhật với credentials của profile "personal@gmail.com".
@@ -169,13 +178,27 @@ Saved profiles:
   hobby@outlook.com (created: 2026-03-19 08:00)
 ```
 
-### 4. Kiểm tra profiles có limit còn trống (⭐ RECOMMENDED)
+### 4. Xem current account và usage tất cả profiles (⭐ RECOMMENDED)
 
 ```bash
-# Chạy không tham số để xem profiles có limit available
+# Chạy không tham số để xem current account và usage
 codex-sweet
+```
 
-# Hoặc dùng command available
+Output:
+```
+Current account: personal@gmail.com
+
+📊 work - work@email.com (plus)
+───────────────────────────────────────────────────────────
+5h limit:        [███████████████     ]  77% left (resets 16:30)
+Weekly limit:    [█████████████       ]  68% left (resets 15:30 on 26 Mar)
+```
+
+### 5. Kiểm tra profiles có limit còn trống
+
+```bash
+# Dùng command available để xem profiles còn limit
 codex-sweet available
 ```
 
@@ -189,10 +212,10 @@ Output:
 ✓ Found 2 profile(s) with available limits
 ```
 
-### 5. Xem usage tất cả profiles (⭐ RECOMMENDED)
+### 6. Xem usage tất cả profiles
 
 ```bash
-# Xem usage của tất cả profiles
+# Xem usage của tất cả profiles, không in dòng Current account
 codex-sweet usage
 ```
 
@@ -208,6 +231,19 @@ Weekly limit:    [█████████████       ]  68% left (res
 5h limit:        [███████████████████ ]  95% left (resets 17:15)
 Weekly limit:    [█████████████████   ]  88% left (resets 16:20 on 26 Mar)
 ```
+
+### 7. Bash completion
+
+```bash
+# Load completion cho shell hiện tại
+source <(codex-sweet completion bash)
+
+# Cài lâu dài cho user hiện tại
+mkdir -p ~/.local/share/bash-completion/completions
+codex-sweet completion bash > ~/.local/share/bash-completion/completions/codex-sweet
+```
+
+Sau khi mở shell mới, Bash có thể autocomplete commands và profile names cho các command như `switch`, `use`, `usage`, `info`, và `delete`.
 
 ### 8. Xem thông tin chi tiết profile
 
@@ -227,19 +263,19 @@ Account ID:  f817b565-85c6-44db-9d54-f3f61d36c111
 Last Refresh: 2026-03-19T09:37:00Z
 ```
 
-### 6. Xem usage 1 profile cụ thể
+### 9. Xem usage 1 profile cụ thể
 
 ```bash
 codex-sweet usage work@company.com
 ```
 
-### 7. Xem chi tiết profile
+### 10. Xem chi tiết profile
 
 ```bash
 codex-sweet info work@company.com
 ```
 
-### 8. Xóa profile
+### 11. Xóa profile
 
 ```bash
 codex-sweet delete old@email.com
@@ -250,13 +286,16 @@ codex-sweet delete old@email.com
 ### Scenario 1: Bắt đầu ngày làm việc
 
 ```bash
-# Morning check - Xem profile nào còn limit
+# Morning check - Xem current account và usage
 codex-sweet
 
 # Output:
-# ● work@company.com - 5h: 100% left, Weekly: 95% left
-#   personal@gmail.com - 5h: 100% left, Weekly: 88% left
-#   hobby@outlook.com - 5h: 45% left, Weekly: 52% left
+# Current account: work@company.com
+# 📊 work@company.com - work@company.com (plus)
+# 5h limit:        [████████████████████] 100% left (resets 16:30)
+
+# Nếu chỉ muốn danh sách profiles còn limit
+codex-sweet available
 
 # Switch sang profile tốt nhất
 codex-sweet switch work@company.com
@@ -269,10 +308,10 @@ codex chat "review my code"
 
 ```bash
 # Khi gặp rate limit error
-codex-sweet  # Quick check available profiles
+codex-sweet available  # Quick check available profiles
 
 # Switch sang profile còn limit
-codex-sweet switch personal@gmail.com
+codex-sweet use personal@gmail.com
 
 # Continue coding immediately
 codex chat "continue implementation"
@@ -393,17 +432,17 @@ Config được lưu tại `~/.codex-sweet/notify.json` với permission `0600`.
    alias csu='codex-sweet usage'
 
    # Usage:
-   cs                              # Check available
-   csa                             # Same as above
+   cs                              # View current account + usage
+   csa                             # Check available profiles
    csu                             # View all usage
-   cs switch personal@gmail.com    # Switch profile
+   cs use personal@gmail.com       # Use/switch profile
    ```
 
 2. **Pre-commit hook** - Check limit trước khi code:
    ```bash
    # .git/hooks/pre-commit
    #!/bin/bash
-   codex-sweet > /dev/null 2>&1
+   codex-sweet available > /dev/null 2>&1
    if [ $? -ne 0 ]; then
        echo "⚠️  Warning: No Codex profiles with available limits"
    fi
@@ -419,9 +458,10 @@ Config được lưu tại `~/.codex-sweet/notify.json` với permission `0600`.
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `codex-sweet` | Check profiles còn limit (default) | `codex-sweet` |
+| `codex-sweet` | Xem current account và usage tất cả profiles (default) | `codex-sweet` |
 | `codex-sweet save` | Lưu profile mới (auto-named by email) | `codex-sweet save` |
 | `codex-sweet switch <email>` | Switch sang profile khác | `codex-sweet switch work@company.com` |
+| `codex-sweet use <email>` | Alias của `switch` để dùng profile khác | `codex-sweet use work@company.com` |
 | `codex-sweet list` | List tất cả profiles | `codex-sweet list` |
 | `codex-sweet available` | Xem profiles còn limit | `codex-sweet available` |
 | `codex-sweet usage` | Xem usage tất cả profiles | `codex-sweet usage` |
@@ -433,6 +473,7 @@ Config được lưu tại `~/.codex-sweet/notify.json` với permission `0600`.
 | `codex-sweet notify remove <index>` | Xóa notification URL | `codex-sweet notify remove 0` |
 | `codex-sweet notify list` | Xem notification URLs | `codex-sweet notify list` |
 | `codex-sweet notify test` | Gửi test notification | `codex-sweet notify test` |
+| `codex-sweet completion bash` | Xuất bash completion script | `source <(codex-sweet completion bash)` |
 
 ## 📋 Profile Structure Details
 
